@@ -124,6 +124,16 @@ export const settings = {
          * Whether to enable the overview window preview swipe-up-to-close feature or not.
          */
         windowPreviewGesturesEnabled: new BoolSetting('window-preview-gestures-enabled', true),
+
+        /**
+         * Whether to prevent overview background gestures from intercepting touch interactions with workspace thumbnails.
+         */
+        thumbnailsProtectionEnabled: new BoolSetting('overview-background-gestures-thumbnails-protection-enabled', true),
+
+        /**
+         * Whether to lock gestures to a single axis (horizontal vs vertical) to prevent diagonal drifting.
+         */
+        axisLockEnabled: new BoolSetting('overview-background-gestures-axis-lock-enabled', true),
     },
 
     osk: {

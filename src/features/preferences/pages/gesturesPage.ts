@@ -63,6 +63,16 @@ export class GesturesPage extends Adw.PreferencesPage {
                     subtitle: "Close windows by swiping them up in the overview, long-press and drag to move",
                     setting: settings.backgroundNavigationGestures.windowPreviewGesturesEnabled,
                 }),
+                buildSwitchRow({
+                    title: "Protect Workspace Thumbnails",
+                    subtitle: "Prevent overview background gestures from intercepting interactions with workspace thumbnails",
+                    setting: settings.backgroundNavigationGestures.thumbnailsProtectionEnabled,
+                }),
+                buildSwitchRow({
+                    title: "Lock Motion to Single Axis",
+                    subtitle: "Prevent diagonal drifting during overview background gestures",
+                    setting: settings.backgroundNavigationGestures.axisLockEnabled,
+                }),
             ]
         }));
 
