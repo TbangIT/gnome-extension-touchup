@@ -60,6 +60,24 @@ export const settings = {
         gesturesBaseDistFactor: new IntSetting('navigation-bar-gestures-base-dist-factor', 2, 1, 10),
 
         /**
+         * The active touch trigger region along the bottom navigation bar.
+         * Choices:
+         *  - "full" - Full width of the display edge
+         *  - "edges" - Outer sides only (left and right thirds, leaving the middle third for bottom app controls)
+         */
+        gesturesTriggerRegion: new EnumSetting<'full' | 'edges'>('navigation-bar-gestures-trigger-region', 'edges'),
+
+        /**
+         * The height of the bottom gesture trigger area in logical pixels.
+         */
+        gesturesTriggerHeight: new IntSetting('navigation-bar-gestures-trigger-height', 28, 16, 50),
+
+        /**
+         * Whether horizontal swipes across the navigation bar switch workspaces.
+         */
+        gesturesHorizontalWorkspaceSwitch: new BoolSetting('navigation-bar-gestures-horizontal-workspace-switch', true),
+
+        /**
          * Which buttons to show on the left side of the button navigation bar
          *
          * Available choices are:

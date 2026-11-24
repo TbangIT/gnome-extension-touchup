@@ -118,6 +118,31 @@ export class NavigationBarPage extends Adw.PreferencesPage {
                         page_increment: 1,
                     }),
                 }),
+                buildComboRow({
+                    title: "Trigger Region",
+                    subtitle: "Choose where on the bottom edge gestures are captured",
+                    items: [
+                        { label: 'Edges Only (Left + Right, center passthrough)', value: 'edges' },
+                        { label: 'Full Width', value: 'full' },
+                    ],
+                    setting: settings.navigationBar.gesturesTriggerRegion,
+                }),
+                buildSpinRow({
+                    title: 'Trigger Area Height',
+                    subtitle: 'Height in pixels along the bottom edge where gestures are captured',
+                    setting: settings.navigationBar.gesturesTriggerHeight,
+                    adjustment: new Gtk.Adjustment({
+                        lower: settings.navigationBar.gesturesTriggerHeight.min,
+                        upper: settings.navigationBar.gesturesTriggerHeight.max,
+                        step_increment: 1,
+                        page_increment: 2,
+                    }),
+                }),
+                buildSwitchRow({
+                    title: "Horizontal Workspace Switching",
+                    subtitle: "Swipe horizontally across the navigation bar to switch between workspaces",
+                    setting: settings.navigationBar.gesturesHorizontalWorkspaceSwitch,
+                }),
             ],
             // Only show this group when mode is set to "gestures":
             onCreated: (group) => {

@@ -22,7 +22,7 @@ import EventEmitter from "$src/utils/eventEmitter";
  * Area reserved on the left side of the navbar in which a swipe up opens the OSK,
  * in logical pixels
  */
-const LEFT_EDGE_OFFSET = 100;
+const LEFT_EDGE_OFFSET = 30;
 
 /**
  * The full height of the navigation bar (not just the pill),
@@ -35,6 +35,7 @@ export default class GestureNavigationBar extends BaseNavigationBar<_EventPassth
     declare private pill: St.Bin;
     private styleClassUpdateInterval: IntervalRunner;
     private _isWindowNearAndNotOnSystemChrome: boolean = false;
+    private _settingSignals: number[] = [];
     readonly gestureManager: NavigationBarGestureManager;
 
     constructor(props: {reserveSpace: boolean, invisibleMode: boolean}) {
@@ -52,6 +53,16 @@ export default class GestureNavigationBar extends BaseNavigationBar<_EventPassth
             this._updateStyleClassIntervalEnabled();
             void this.updateStyleClasses();
         });
+
+        this._settingSignals.push(
+            settings.navigationBar.gesturesTriggerHeight.connect(() => {
+                this.onBeforeReallocate();
+                this.actor.queue_relayout();
+            }),
+            settings.navigationBar.gesturesTriggerRegion.connect(() => {
+                this.actor.queue_relayout();
+            })
+        );
     }
 
     protected _buildActor(): _EventPassthroughActor {
@@ -102,8 +113,9 @@ export default class GestureNavigationBar extends BaseNavigationBar<_EventPassth
 
     protected computeHeight() {
         const sf = St.ThemeContext.get_for_stage(global.stage as Clutter.Stage).scaleFactor;
+        const triggerHeight = settings.navigationBar.gesturesTriggerHeight.get();
 
-        return NAV_BAR_HEIGHT * sf;
+        return Math.max(NAV_BAR_HEIGHT, triggerHeight) * sf;
     }
 
     protected computePillSize() {
@@ -208,6 +220,11 @@ export default class GestureNavigationBar extends BaseNavigationBar<_EventPassth
 
     destroy() {
         this.styleClassUpdateInterval.stop();
+        for (const id of this._settingSignals) {
+            settings.navigationBar.gesturesTriggerHeight.disconnect(id);
+            settings.navigationBar.gesturesTriggerRegion.disconnect(id);
+        }
+        this._settingSignals = [];
         this.gestureManager.destroy();
         super.destroy();
     }
@@ -299,11 +316,26 @@ class NavigationBarGestureManager extends EventEmitter<{
             return true;
         }
 
-        // If we're not yet during a gesture, only capture sequences that start on the navigation bar area:
+        if (!event)
+            return false;
+
         const [x, y] = event.get_coords();
         const monitorRect = this._getMonitorRect(x, y);
+        const sf = St.ThemeContext.get_for_stage(global.stage as Clutter.Stage).scaleFactor;
+        const triggerHeight = Math.max(this._edgeThreshold, Math.round(settings.navigationBar.gesturesTriggerHeight.get() * sf));
 
-        return y > monitorRect.y + monitorRect.height - this._edgeThreshold;
+        const inBottomEdge = y >= (monitorRect.y + monitorRect.height - triggerHeight);
+        if (!inBottomEdge)
+            return false;
+
+        const regionMode = settings.navigationBar.gesturesTriggerRegion.get();
+        if (regionMode === 'edges') {
+            const inLeftThird = x <= (monitorRect.x + monitorRect.width * (1.0 / 3.0));
+            const inRightThird = x >= (monitorRect.x + monitorRect.width * (2.0 / 3.0));
+            return inLeftThird || inRightThird;
+        }
+
+        return true;
     }
 
     private _onGestureProgress(state: GestureState) {
@@ -316,21 +348,32 @@ class NavigationBarGestureManager extends EventEmitter<{
             return;
         }
 
-        const finalDirection = state.firstMotionDirection?.direction;
-        const highestPoint = state.events.reduce((prev, curr) => prev.y < curr.y ? prev : curr);
-        const maxYDist = state.events[0].y - highestPoint.y;
+        const horizontalEnabled = settings.navigationBar.gesturesHorizontalWorkspaceSwitch.get();
+        const axis = state.firstMotionDirection?.axis;
+        const d = state.totalMotionDelta;
 
-        if (maxYDist > this._swipeUpThreshold || (finalDirection && finalDirection !== 'up')) {
-            const baseDistFactor = settings.navigationBar.gesturesBaseDistFactor.get() / 10.0;
-            const d = state.totalMotionDelta;
-            this._navigationGestureController.gestureProgress(
-                (-d.y - this._swipeUpThreshold) / (this._navigationGestureController.overviewBaseDist * baseDistFactor),
-                -d.x / (this._navigationGestureController.workspaceBaseDist * 0.62)
-            );
-
+        if (horizontalEnabled && axis === 'horizontal') {
+            const wsProgress = -d.x / (this._navigationGestureController.workspaceBaseDist * 0.35);
+            this._navigationGestureController.gestureProgress(0, wsProgress);
             if (this._isSubthresholdGesture) {
                 this.emit('navigation-started');
                 this._isSubthresholdGesture = false;
+            }
+        } else {
+            const highestPoint = state.events.reduce((prev, curr) => prev.y < curr.y ? prev : curr);
+            const maxYDist = state.events[0].y - highestPoint.y;
+
+            if (maxYDist > this._swipeUpThreshold || (state.firstMotionDirection?.direction && state.firstMotionDirection?.direction !== 'up')) {
+                const baseDistFactor = settings.navigationBar.gesturesBaseDistFactor.get() / 10.0;
+                this._navigationGestureController.gestureProgress(
+                    (-d.y - this._swipeUpThreshold) / (this._navigationGestureController.overviewBaseDist * baseDistFactor),
+                    horizontalEnabled ? 0 : (-d.x / (this._navigationGestureController.workspaceBaseDist * 0.62))
+                );
+
+                if (this._isSubthresholdGesture) {
+                    this.emit('navigation-started');
+                    this._isSubthresholdGesture = false;
+                }
             }
         }
 
@@ -364,18 +407,32 @@ class NavigationBarGestureManager extends EventEmitter<{
 
     private _onGestureCompleted(state: GestureState) {
         const lastMotion = state.lastMotionDirection;
-        const direction = lastMotion?.direction ?? null;
+        const firstMotion = state.firstMotionDirection;
+        const d = state.totalMotionDelta;
+        const horizontalEnabled = settings.navigationBar.gesturesHorizontalWorkspaceSwitch.get();
 
-        if (lastMotion === null) {
-            this._navigationGestureController.gestureCancel();
+        if (horizontalEnabled && (firstMotion?.axis === 'horizontal' || Math.abs(d.x) > Math.abs(d.y))) {
+            let direction = state.finalMotionDirection?.direction ?? lastMotion?.direction ?? firstMotion?.direction ?? null;
+            if (!direction || (direction !== 'left' && direction !== 'right')) {
+                if (d.x < -10) direction = 'left';
+                else if (d.x > 10) direction = 'right';
+            }
+
+            if (direction === 'left' || direction === 'right') {
+                this._navigationGestureController.gestureEnd(direction);
+            } else {
+                this._navigationGestureController.gestureCancel();
+            }
         } else if (this._isKeyboardGesture) {
+            const direction = lastMotion?.direction ?? null;
             if (direction === 'up') {
                 Main.keyboard._keyboard?.gestureActivate();
             } else {
                 Main.keyboard._keyboard?.gestureCancel();
             }
         } else {
-            if (lastMotion?.axis === 'vertical' && -state.totalMotionDelta.y < this._swipeUpThreshold) {
+            const direction = lastMotion?.direction ?? null;
+            if (lastMotion === null || (lastMotion?.axis === 'vertical' && -d.y < this._swipeUpThreshold)) {
                 this._navigationGestureController.gestureCancel();
             } else {
                 this._navigationGestureController.gestureEnd(direction);
@@ -428,6 +485,35 @@ class _EventPassthroughActor extends Widgets.Bin {
     vfunc_pick(pick_context: Clutter.PickContext) {
         if (!this.should_pick(pick_context))
             return;
+
+        const regionMode = settings.navigationBar.gesturesTriggerRegion.get();
+        if (regionMode === 'edges') {
+            const actorFrame = Mtk.Rectangle.from_graphene_rect(
+                this.get_transformed_extents(),
+                Mtk.RoundingStrategy.ROUND,
+            );
+            const third = Math.round(actorFrame.width / 3.0);
+
+            // Pick left third
+            const leftRect = new Clutter.ActorBox({
+                x1: 0,
+                y1: 0,
+                x2: third,
+                y2: actorFrame.height,
+            });
+
+            // Pick right third
+            const rightRect = new Clutter.ActorBox({
+                x1: actorFrame.width - third,
+                y1: 0,
+                x2: actorFrame.width,
+                y2: actorFrame.height,
+            });
+
+            this.pick_box(pick_context, leftRect);
+            this.pick_box(pick_context, rightRect);
+            return;
+        }
 
         // If there's no rect to pass events through in, resort to default behavior (intercept all events on
         // this actor):
