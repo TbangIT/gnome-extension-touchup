@@ -197,6 +197,11 @@ export const settings = {
          * Whether to allow opening and closing the panel menus via a swipe gesture.
          */
         panelMenusSwipeToOpenEnabled: new BoolSetting('panel-menus-swipe-to-open-enabled', true),
+
+        /**
+         * Whether to capture panel swipe gestures from stage to ensure top bar items do not intercept the gesture.
+         */
+        stageCaptureEnabled: new BoolSetting('panel-menus-swipe-stage-capture-enabled', true),
     },
 
     screenRotateUtils: {

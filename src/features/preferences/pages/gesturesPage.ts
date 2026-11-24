@@ -40,6 +40,11 @@ export class GesturesPage extends Adw.PreferencesPage {
                     subtitle: "Toggle to enable or disable the panel menu gestures feature",
                     setting: settings.panel.panelMenusSwipeToOpenEnabled,
                 }),
+                buildSwitchRow({
+                    title: "Enhanced Top Panel Touch Capture",
+                    subtitle: "Capture swipes from the stage so custom panel items do not swallow the gesture",
+                    setting: settings.panel.stageCaptureEnabled,
+                }),
             ]
         }));
 

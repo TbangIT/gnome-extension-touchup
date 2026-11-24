@@ -15,6 +15,7 @@ import {Ref} from "$src/utils/ui/widgets";
 import {logger} from "$src/core/logging";
 import St from "gi://St";
 import {Panel} from "resource:///org/gnome/shell/ui/panel.js";
+import {settings} from "$src/settings";
 
 
 export class PanelMenusSwipeToOpenFeature extends ExtensionFeature {
@@ -113,9 +114,33 @@ export class PanelMenusSwipeToOpenFeature extends ExtensionFeature {
         // Setup our `Clutter.PanGesture` instance:
         const gesture = recognizer.createPanGesture({ panAxis: Clutter.PanAxis.Y });
 
+        gesture.connect('should-handle-sequence', (_, event: Clutter.Event) => {
+            if (!settings.panel.stageCaptureEnabled.get())
+                return true;
+            if (!event)
+                return false;
+            // Only touch input: mouse/pointer events must NEVER be intercepted
+            if (!GestureRecognizerEvent.isTouch(event))
+                return false;
+            if (Main.overview.visible)
+                return false;
+
+            const monitor = Main.layoutManager.primaryMonitor ?? Main.layoutManager.monitors[0];
+            if (!monitor)
+                return false;
+
+            const [, y] = event.get_coords();
+            const panelBox = Main.layoutManager.panelBox;
+
+            return y >= panelBox.y && y <= (panelBox.y + panelBox.height);
+        });
+
         this.subpm!.patch(() => {
-            Main.panel.add_action_full('touchup-panel-menus-swipe-to-open', Clutter.EventPhase.CAPTURE, gesture);
-            return () => Main.panel.remove_action(gesture);
+            const targetActor: Clutter.Actor = settings.panel.stageCaptureEnabled.get()
+                ? global.stage
+                : Main.panel;
+            targetActor.add_action_full('touchup-panel-menus-swipe-to-open', Clutter.EventPhase.CAPTURE, gesture);
+            return () => targetActor.remove_action(gesture);
         });
     }
 
