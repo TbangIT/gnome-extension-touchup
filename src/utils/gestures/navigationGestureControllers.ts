@@ -19,6 +19,12 @@ class ControllerCoordinator<T extends GestureController<any>> {
         this._focusLock = controller;
     }
 
+    releaseFocus(controller: T) {
+        if (this._focusLock === controller) {
+            this._focusLock = null;
+        }
+    }
+
     maybeAcquireFocus(controller: T) {
         if (this._focusLock === controller) {
             return true;
@@ -87,6 +93,7 @@ abstract class GestureController<D extends ('left' | 'right' | 'up' | 'down')[]>
             this._doEnd(direction ?? null);
         }
         this._isGestureRunning = false;
+        this._coordinator.releaseFocus(this);
     }
 
     gestureCancel() {
@@ -94,6 +101,7 @@ abstract class GestureController<D extends ('left' | 'right' | 'up' | 'down')[]>
             this._doCancel();
         }
         this._isGestureRunning = false;
+        this._coordinator.releaseFocus(this);
     }
 
     get isGestureRunning() {
@@ -232,18 +240,32 @@ export class WorkspaceGestureController extends GestureController<['left' | 'rig
 
     protected _doEnd(direction: 'left' | 'right' | null) {
         if (this.isGestureRunning) {
-            // TODO: debug occasional cases of non-ending gesture
+            const duration = 250;
+            const delta = this._currentProgress - this._initialProgress;
+            let target: number;
 
-            if (direction === 'left' || direction === 'right') {
-                this._wsController._switchWorkspaceEnd({}, 500, Math.round(this._currentProgress + (direction == 'left' ? 0.5 : -0.5)));
+            if (direction === 'left' || delta > 0.05) {
+                target = Math.ceil(this._currentProgress);
+                if (target === this._initialProgress) {
+                    target = this._initialProgress + 1;
+                }
+            } else if (direction === 'right' || delta < -0.05) {
+                target = Math.floor(this._currentProgress);
+                if (target === this._initialProgress) {
+                    target = this._initialProgress - 1;
+                }
             } else {
-                this._wsController._switchWorkspaceEnd({}, 500, Math.round(this._currentProgress));
+                target = Math.round(this._currentProgress);
             }
+
+            const nWorkspaces = global.workspace_manager.get_n_workspaces();
+            target = Math.max(0, Math.min(nWorkspaces - 1, target));
+            this._wsController._switchWorkspaceEnd({}, duration, target);
         }
     }
 
     protected _doCancel() {
-        this._wsController._switchWorkspaceEnd({}, 500, this._cancelProgress);
+        this._wsController._switchWorkspaceEnd({}, 250, this._cancelProgress);
     }
 
     get baseDist() {
